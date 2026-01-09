@@ -42,12 +42,19 @@ function apiBase(): string {
     process.env.NEXT_PUBLIC_PANEL_API_URL ||
     process.env.NEXT_PUBLIC_PANEL_API_BASE ||
     '';
+
   const s = String(v).trim().replace(/\/+$/, '');
 
-  // Eğer env '/api' veya '.../api' ise onu olduğu gibi kullanacağız.
-  // Layout içinde ekstra '/api' eklemiyoruz.
+  // relative "/api" ise, SSR'da mutlak yap
+  if (s === '/api') {
+    const host = process.env.PUBLIC_HOST || process.env.VERCEL_URL || '';
+    // PUBLIC_HOST önerim: test.guezelwebdesign.com
+    return host ? `https://${host}/api` : '/api';
+  }
+
   return s;
 }
+
 
 
 function pickPrimaryRole(roles: Role[]): string {
@@ -62,7 +69,8 @@ async function requireDashboardAdmin(): Promise<Me> {
   const cookieStore = await cookies();
 
   const base = apiBase();
-  const url = base ? `${base}/auth/status` : `/auth/status`;
+  const url = base ? `${base}/auth/status` : `/api/auth/status`;
+
 
   try {
     const res = await fetch(url, {
