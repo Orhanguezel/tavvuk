@@ -1,0 +1,329 @@
+{
+	"info": {
+		"name": "Tavvuk — Reports (Admin)",
+		"_postman_id": "2f3b9b8b-8a3e-4a6d-8d4c-7f0b1d9f6e11",
+		"description": "Admin Reports endpoints: KPI, Users Performance, Locations",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8045"
+		},
+		{
+			"key": "from",
+			"value": "2026-01-01"
+		},
+		{
+			"key": "to",
+			"value": "2026-01-31"
+		},
+		{
+			"key": "access_token",
+			"value": ""
+		}
+	],
+	"item": [
+		{
+			"name": "01) GET KPI (day/week/month)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/admin/reports/kpi?from={{from}}&to={{to}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"admin",
+						"reports",
+						"kpi"
+					],
+					"query": [
+						{
+							"key": "from",
+							"value": "{{from}}"
+						},
+						{
+							"key": "to",
+							"value": "{{to}}"
+						}
+					]
+				}
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Response is an array', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(Array.isArray(data)).to.equal(true);",
+							"});",
+							"",
+							"pm.test('KPI rows have required fields', function () {",
+							"  const data = pm.response.json();",
+							"  if (!Array.isArray(data) || data.length === 0) return;",
+							"  const r = data[0];",
+							"  pm.expect(r).to.have.property('period');",
+							"  pm.expect(['day','week','month']).to.include(r.period);",
+							"  pm.expect(r).to.have.property('bucket');",
+							"  pm.expect(r).to.have.property('orders_total');",
+							"  pm.expect(r).to.have.property('delivered_orders');",
+							"  pm.expect(r).to.have.property('cancelled_orders');",
+							"  pm.expect(r).to.have.property('chickens_delivered');",
+							"  pm.expect(r).to.have.property('success_rate');",
+							"});"
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "02) GET Users Performance (role=seller)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/admin/reports/users/performance?from={{from}}&to={{to}}&role=seller",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"admin",
+						"reports",
+						"users",
+						"performance"
+					],
+					"query": [
+						{
+							"key": "from",
+							"value": "{{from}}"
+						},
+						{
+							"key": "to",
+							"value": "{{to}}"
+						},
+						{
+							"key": "role",
+							"value": "seller"
+						}
+					]
+				}
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Response is an array', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(Array.isArray(data)).to.equal(true);",
+							"});",
+							"",
+							"pm.test('Rows have required fields', function () {",
+							"  const data = pm.response.json();",
+							"  if (!Array.isArray(data) || data.length === 0) return;",
+							"  const r = data[0];",
+							"  pm.expect(r).to.have.property('user_id');",
+							"  pm.expect(r).to.have.property('role');",
+							"  pm.expect(r.role).to.eql('seller');",
+							"  pm.expect(r).to.have.property('orders_total');",
+							"  pm.expect(r).to.have.property('delivered_orders');",
+							"  pm.expect(r).to.have.property('cancelled_orders');",
+							"  pm.expect(r).to.have.property('chickens_delivered');",
+							"  pm.expect(r).to.have.property('success_rate');",
+							"  pm.expect(r).to.have.property('incentive_amount_total');",
+							"  pm.expect(r).to.have.property('incentive_deliveries_count');",
+							"  pm.expect(r).to.have.property('incentive_chickens_count');",
+							"});"
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "03) GET Users Performance (role=driver)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/admin/reports/users/performance?from={{from}}&to={{to}}&role=driver",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"admin",
+						"reports",
+						"users",
+						"performance"
+					],
+					"query": [
+						{
+							"key": "from",
+							"value": "{{from}}"
+						},
+						{
+							"key": "to",
+							"value": "{{to}}"
+						},
+						{
+							"key": "role",
+							"value": "driver"
+						}
+					]
+				}
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Response is an array', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(Array.isArray(data)).to.equal(true);",
+							"});",
+							"",
+							"pm.test('Rows have required fields', function () {",
+							"  const data = pm.response.json();",
+							"  if (!Array.isArray(data) || data.length === 0) return;",
+							"  const r = data[0];",
+							"  pm.expect(r).to.have.property('user_id');",
+							"  pm.expect(r).to.have.property('role');",
+							"  pm.expect(r.role).to.eql('driver');",
+							"  pm.expect(r).to.have.property('orders_total');",
+							"  pm.expect(r).to.have.property('delivered_orders');",
+							"  pm.expect(r).to.have.property('cancelled_orders');",
+							"  pm.expect(r).to.have.property('chickens_delivered');",
+							"  pm.expect(r).to.have.property('success_rate');",
+							"  pm.expect(r).to.have.property('incentive_amount_total');",
+							"  pm.expect(r).to.have.property('incentive_deliveries_count');",
+							"  pm.expect(r).to.have.property('incentive_chickens_count');",
+							"});"
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "04) GET Locations (city/district breakdown)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/admin/reports/locations?from={{from}}&to={{to}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"admin",
+						"reports",
+						"locations"
+					],
+					"query": [
+						{
+							"key": "from",
+							"value": "{{from}}"
+						},
+						{
+							"key": "to",
+							"value": "{{to}}"
+						}
+					]
+				}
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Response is an array', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(Array.isArray(data)).to.equal(true);",
+							"});",
+							"",
+							"pm.test('Location rows have required fields', function () {",
+							"  const data = pm.response.json();",
+							"  if (!Array.isArray(data) || data.length === 0) return;",
+							"  const r = data[0];",
+							"  pm.expect(r).to.have.property('city_id');",
+							"  pm.expect(r).to.have.property('city_name');",
+							"  pm.expect(r).to.have.property('district_id');",
+							"  pm.expect(r).to.have.property('district_name');",
+							"  pm.expect(r).to.have.property('orders_total');",
+							"  pm.expect(r).to.have.property('delivered_orders');",
+							"  pm.expect(r).to.have.property('cancelled_orders');",
+							"  pm.expect(r).to.have.property('chickens_delivered');",
+							"  pm.expect(r).to.have.property('success_rate');",
+							"});"
+						]
+					}
+				}
+			]
+		}
+	]
+}

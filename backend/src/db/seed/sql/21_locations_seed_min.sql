@@ -1,0 +1,32 @@
+-- =============================================================
+-- FILE: db/seed/70_locations_seed_min.sql
+-- Minimal seed (example)
+-- =============================================================
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+START TRANSACTION;
+
+INSERT INTO `cities` (`id`,`code`,`name`,`is_active`,`created_at`,`updated_at`)
+VALUES
+('c0000000-0000-4000-8000-000000000016',16,'Bursa',1,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3)),
+('c0000000-0000-4000-8000-000000000034',34,'İstanbul',1,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))
+ON DUPLICATE KEY UPDATE
+  `name`=VALUES(`name`),
+  `is_active`=VALUES(`is_active`),
+  `updated_at`=CURRENT_TIMESTAMP(3);
+
+INSERT INTO `districts` (`id`,`city_id`,`code`,`name`,`is_active`,`created_at`,`updated_at`)
+VALUES
+('d0000000-0000-4000-8000-000000000001','c0000000-0000-4000-8000-000000000016',1,'Gemlik',1,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3)),
+('d0000000-0000-4000-8000-000000000002','c0000000-0000-4000-8000-000000000016',2,'Nilüfer',1,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3)),
+('d0000000-0000-4000-8000-000000000003','c0000000-0000-4000-8000-000000000034',1,'Kadıköy',1,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3)),
+('d0000000-0000-4000-8000-000000000004','c0000000-0000-4000-8000-000000000034',2,'Beşiktaş',1,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))
+ON DUPLICATE KEY UPDATE
+  `code`=VALUES(`code`),
+  `is_active`=VALUES(`is_active`),
+  `updated_at`=CURRENT_TIMESTAMP(3);
+
+COMMIT;
+
+SET FOREIGN_KEY_CHECKS = 1;

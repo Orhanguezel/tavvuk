@@ -1,0 +1,39 @@
+// src/common/middleware/auth.ts
+import type { FastifyRequest, FastifyReply } from 'fastify';
+import '@fastify/jwt';
+import '@fastify/cookie';
+
+export interface JwtUser {
+  sub?: string;
+  email?: string;
+  role?: string;
+  roles?: string[];
+  is_admin?: boolean;
+  [k: string]: unknown;
+}
+
+export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
+  try {
+    const cookies = (req.cookies ?? {}) as Record<string, string | undefined>;
+    const cookieToken = cookies.access_token ?? cookies.accessToken;
+
+    if (cookieToken) {
+      const payload = (await req.server.jwt.verify(cookieToken)) as JwtUser;
+      (req as unknown as { user: JwtUser }).user = payload;
+      return;
+    }
+
+    const auth = req.headers.authorization;
+    if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+      await req.jwtVerify<JwtUser>();
+      const u = (req as unknown as { user?: JwtUser }).user;
+      if (!u) return reply.code(401).send({ error: { message: 'invalid_token' } });
+      return;
+    }
+
+    return reply.code(401).send({ error: { message: 'no_token' } });
+  } catch (err) {
+    req.log.warn({ err }, 'auth_failed');
+    return reply.code(401).send({ error: { message: 'invalid_token' } });
+  }
+}
