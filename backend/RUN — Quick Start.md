@@ -99,5 +99,10 @@ git reset --hard origin/main
 git clean -fd   # (untracked dosyaları da siler, istersen)
 
 
+cd /var/www/tavvuk/backend
+pm2 start ecosystem.config.cjs
+
+
+
 
 
