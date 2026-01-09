@@ -42,8 +42,13 @@ function apiBase(): string {
     process.env.NEXT_PUBLIC_PANEL_API_URL ||
     process.env.NEXT_PUBLIC_PANEL_API_BASE ||
     '';
-  return String(v).trim().replace(/\/+$/, '');
+  const s = String(v).trim().replace(/\/+$/, '');
+
+  // Eğer env '/api' veya '.../api' ise onu olduğu gibi kullanacağız.
+  // Layout içinde ekstra '/api' eklemiyoruz.
+  return s;
 }
+
 
 function pickPrimaryRole(roles: Role[]): string {
   // Basit öncelik: admin > seller > driver
@@ -57,7 +62,7 @@ async function requireDashboardAdmin(): Promise<Me> {
   const cookieStore = await cookies();
 
   const base = apiBase();
-  const url = base ? `${base}/api/auth/status` : `/api/auth/status`;
+  const url = base ? `${base}/auth/status` : `/auth/status`;
 
   try {
     const res = await fetch(url, {

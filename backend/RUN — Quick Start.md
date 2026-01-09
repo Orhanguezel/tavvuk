@@ -103,6 +103,20 @@ cd /var/www/tavvuk/backend
 pm2 start ecosystem.config.cjs
 
 
+cd /var/www/tavvuk/frontend
+pm2 start ecosystem.config.cjs
+
+
+pm2 save
+pm2 startup
+
+
+curl -I http://127.0.0.1:3019 | head
+curl -I http://127.0.0.1:8045 | head
+
+
+
+
 
 
 
