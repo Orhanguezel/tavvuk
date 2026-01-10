@@ -1,8 +1,12 @@
 // =============================================================
 // FILE: src/modules/orders/admin.controller.ts
-// FINAL — Admin Orders controller (approve/assign/cancel + list filters)
-// - assign-driver artık Assignments üzerinden (tek merkez)
+// FINAL — Admin Orders controller (create/list/get/approve/assign/cancel)
+// - Guards: requireAuth + requireAdmin (consistent)
+// - List: x-total-count + content-range (react-admin compatible)
+// - Assign-driver: single source of truth via Assignments service
+// - Create: manual order create for admin (submitted)
 // =============================================================
+
 import type { RouteHandler } from 'fastify';
 import { db } from '@/db/client';
 import { requireAuth } from '@/common/middleware/auth';
@@ -12,15 +16,17 @@ import {
   adminListOrdersQuerySchema,
   adminAssignDriverBodySchema,
   adminCancelBodySchema,
+  createOrderBodySchema,
 } from './validation';
 
 import {
   adminListOrders,
+  adminCountOrders,
   getOrderById,
   getOrderItems,
+  createOrderTx,
   approveOrderTx,
   cancelOrderTx,
-  adminCountOrders,
 } from './repository';
 
 // ✅ Single source of truth for assignments
@@ -30,8 +36,72 @@ function getAdminId(req: any): string {
   return String(req.user?.sub ?? '');
 }
 
+function setRangeHeaders(
+  reply: any,
+  resource: string,
+  offset: number,
+  rowsLen: number,
+  total: number,
+) {
+  reply.header('x-total-count', String(total));
+  const start = Number(offset ?? 0);
+  const end = start + rowsLen - 1;
+  reply.header('content-range', `${resource} ${start}-${Math.max(end, start)}/${total}`);
+}
+
+/** POST /admin/orders — manual create */
+export const adminCreate: RouteHandler = async (req, reply) => {
+  await requireAuth(req as any, reply as any);
+  if (reply.sent) return;
+  await requireAdmin(req as any, reply as any);
+  if (reply.sent) return;
+
+  const adminId = getAdminId(req);
+  if (!adminId) return reply.code(401).send({ error: { message: 'unauthorized' } });
+
+  const body = createOrderBodySchema.parse(req.body ?? {});
+
+  try {
+    const created = await db.transaction(async (tx: any) => {
+      const orderId = await createOrderTx(tx, {
+        created_by: adminId,
+        city_id: body.city_id,
+        district_id: body.district_id ?? null,
+        customer_name: body.customer_name,
+        customer_phone: body.customer_phone,
+        address_text: body.address_text,
+        items: body.items.map((it) => ({
+          product_id: it.product_id,
+          qty_ordered: it.qty_ordered,
+        })),
+      });
+
+      const order = await getOrderById(tx, orderId);
+      const items = await getOrderItems(tx, orderId);
+
+      return { order, items };
+    });
+
+    return reply.code(201).send(created);
+  } catch (err: any) {
+    // FK errors -> 400 (invalid city/district/product ids)
+    if (err?.code === 'ER_NO_REFERENCED_ROW_2' || err?.errno === 1452) {
+      return reply.code(400).send({ error: { message: 'invalid_fk' } });
+    }
+    // Duplicate entry -> 409
+    if (err?.code === 'ER_DUP_ENTRY') {
+      return reply.code(409).send({ error: { message: 'conflict' } });
+    }
+    throw err;
+  }
+};
+
+/** GET /admin/orders — list (filters + count) */
 export const adminList: RouteHandler = async (req, reply) => {
-  
+  await requireAuth(req as any, reply as any);
+  if (reply.sent) return;
+  await requireAdmin(req as any, reply as any);
+  if (reply.sent) return;
 
   const q = adminListOrdersQuerySchema.parse(req.query ?? {});
 
@@ -40,15 +110,11 @@ export const adminList: RouteHandler = async (req, reply) => {
     adminCountOrders(db as any, q),
   ]);
 
-  // react-admin / data-grid uyumu
-  reply.header('x-total-count', String(total));
-  const start = Number(q.offset ?? 0);
-  const end = start + rows.length - 1;
-  reply.header('content-range', `orders ${start}-${Math.max(end, start)}/${total}`);
-
+  setRangeHeaders(reply as any, 'orders', Number(q.offset ?? 0), rows.length, total);
   return reply.send(rows);
 };
 
+/** GET /admin/orders/:id — detail */
 export const adminGet: RouteHandler = async (req, reply) => {
   await requireAuth(req as any, reply as any);
   if (reply.sent) return;
@@ -63,6 +129,7 @@ export const adminGet: RouteHandler = async (req, reply) => {
   return reply.send({ order: o, items });
 };
 
+/** POST /admin/orders/:id/approve */
 export const adminApprove: RouteHandler = async (req, reply) => {
   await requireAuth(req as any, reply as any);
   if (reply.sent) return;
@@ -86,6 +153,7 @@ export const adminApprove: RouteHandler = async (req, reply) => {
   return reply.send({ ok: true });
 };
 
+/** POST /admin/orders/:id/assign-driver */
 export const adminAssignDriver: RouteHandler = async (req, reply) => {
   await requireAuth(req as any, reply as any);
   if (reply.sent) return;
@@ -96,13 +164,12 @@ export const adminAssignDriver: RouteHandler = async (req, reply) => {
   const adminId = getAdminId(req);
   const body = adminAssignDriverBodySchema.parse(req.body ?? {});
 
-  // Optional early check for clearer 404 (service already checks too)
+  // early check for clearer 404
   const o = await getOrderById(db as any, orderId);
   if (!o) return reply.code(404).send({ error: { message: 'not_found' } });
 
   try {
     const result = await db.transaction(async (tx: any) => {
-      // ✅ canonical: creates assignments row + updates orders (approved → assigned)
       return await createAssignmentTx(tx, {
         order_id: orderId,
         driver_id: body.driver_id,
@@ -111,16 +178,13 @@ export const adminAssignDriver: RouteHandler = async (req, reply) => {
       });
     });
 
-    // result = { ok: true, assignment: ... }
-    return reply.send({ ok: true, assignment: result.assignment ?? null });
+    return reply.send({ ok: true, assignment: (result as any)?.assignment ?? null });
   } catch (err: any) {
-    // service throws with statusCode in some cases
     const code = Number(err?.statusCode ?? 500);
 
     if (code === 404) return reply.code(404).send({ error: { message: 'not_found' } });
 
     if (code === 409) {
-      // usually: must_be_approved_before_assign OR unique active assignment violation
       const msg =
         String(err?.message ?? '') === 'must_be_approved_before_assign'
           ? 'must_be_approved_before_assign'
@@ -129,7 +193,7 @@ export const adminAssignDriver: RouteHandler = async (req, reply) => {
       return reply.code(409).send({ error: { message: msg } });
     }
 
-    // Unique constraint: uq_assignments_order_active
+    // MariaDB duplicate entry (unique active assignment)
     if (err?.code === 'ER_DUP_ENTRY') {
       return reply.code(409).send({ error: { message: 'order_already_assigned_active' } });
     }
@@ -138,6 +202,7 @@ export const adminAssignDriver: RouteHandler = async (req, reply) => {
   }
 };
 
+/** POST /admin/orders/:id/cancel */
 export const adminCancel: RouteHandler = async (req, reply) => {
   await requireAuth(req as any, reply as any);
   if (reply.sent) return;

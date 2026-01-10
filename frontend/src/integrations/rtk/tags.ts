@@ -11,7 +11,7 @@ export const tags = [
   'Profile',
   'UserRoles',
   'DbSnapshot',
-  'Dashboard',
+  'DashboardAnalytics',
   'DbAdmin',
   'DbModule',
   'DbManifest',

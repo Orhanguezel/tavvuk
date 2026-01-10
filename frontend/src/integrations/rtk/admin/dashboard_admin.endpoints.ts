@@ -1,33 +1,44 @@
 // =============================================================
-// FILE: src/integrations/rtk/endpoints/admin/dashboard_admin.endpoints.ts
-// Ensotek – Admin Dashboard Summary Endpoint
+// FILE: src/integrations/rtk/dashboard_admin.api.ts
+// FINAL — Dashboard ADMIN RTK
+// Base: /api/admin
 // =============================================================
 
 import { baseApi } from '@/integrations/rtk/baseApi';
-import type { DashboardSummaryDto } from '@/integrations/types';
+import type {
+  DashboardRangeKey,
+  DashboardAnalyticsDto,
+  AdminDashboardAnalyticsQuery,
+} from '@/integrations/types';
+
+const BASE = '/admin/dashboard';
 
 export const dashboardAdminApi = baseApi.injectEndpoints({
-  endpoints: (build) => ({
-    /**
-     * GET /admin/dashboard/summary
-     *
-     * Backend sözleşmesi (örnek):
-     *  {
-     *    items: [
-     *      { key: "products", label: "Ürünler", count: 42 },
-     *      { key: "categories", label: "Kategoriler", count: 8 },
-     *      ...
-     *    ]
-     *  }
-     */
-    getDashboardSummaryAdmin: build.query<DashboardSummaryDto, void>({
-      query: () => ({
-        url: '/admin/dashboard/summary',
-        method: 'GET',
-      }),
+  endpoints: (b) => ({
+    /* ----------------------------- Analytics ----------------------------- */
+
+    adminDashboardAnalytics: b.query<DashboardAnalyticsDto, AdminDashboardAnalyticsQuery | void>({
+      query: (params) => {
+        const sp = new URLSearchParams();
+
+        // params: { range?: '7d'|'30d'|'90d' }
+        Object.entries(params ?? {}).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) sp.set(k, String(v));
+        });
+
+        // default range client-side (opsiyonel)
+        if (!sp.get('range')) sp.set('range', '30d' satisfies DashboardRangeKey);
+
+        const qs = sp.toString();
+        return {
+          url: `${BASE}/analytics${qs ? `?${qs}` : ''}`,
+          method: 'GET',
+        };
+      },
+      providesTags: [{ type: 'DashboardAnalytics', id: 'ADMIN' }],
     }),
   }),
-  overrideExisting: false,
+  overrideExisting: true,
 });
 
-export const { useGetDashboardSummaryAdminQuery } = dashboardAdminApi;
+export const { useAdminDashboardAnalyticsQuery } = dashboardAdminApi;

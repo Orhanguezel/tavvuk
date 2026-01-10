@@ -15,9 +15,13 @@ import type {
 
 export const authPublicApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
-    /** POST /auth/register */
+    /**
+     * POST /auth/signup  (opsiyonel)
+     * Admin-only ise bunu komple kaldırabilirsin.
+     * Eğer backend gerçekten /auth/register ise url'i ona çevir.
+     */
     authRegister: build.mutation<AuthTokenResponse, AuthRegisterBody>({
-      query: (body) => ({ url: '/auth/register', method: 'POST', body }),
+      query: (body) => ({ url: '/auth/signup', method: 'POST', body }),
       invalidatesTags: ['User'],
     }),
 
@@ -27,9 +31,12 @@ export const authPublicApi = baseApi.injectEndpoints({
       invalidatesTags: ['User'],
     }),
 
-    /** POST /auth/refresh */
-    authRefresh: build.mutation<AuthTokenRefreshResponse, void>({
-      query: () => ({ url: '/auth/refresh', method: 'POST' }),
+    /**
+     * POST /auth/token/refresh
+     * ✅ baseApi.ts runRefresh ile birebir aynı olmalı
+     */
+    authTokenRefresh: build.mutation<AuthTokenRefreshResponse, void>({
+      query: () => ({ url: '/auth/token/refresh', method: 'POST' }),
       invalidatesTags: ['User'],
     }),
 
@@ -67,7 +74,11 @@ export const authPublicApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/auth/password-reset/confirm', method: 'POST', body }),
     }),
 
-    /** POST /auth/logout (204) */
+    /**
+     * POST /auth/logout
+     * Backend 204 döndürse bile RTK bazen empty body'de sorun çıkarabiliyor.
+     * transformResponse ile stabilize ediyoruz.
+     */
     authLogout: build.mutation<{ ok: true }, void>({
       query: () => ({ url: '/auth/logout', method: 'POST' }),
       transformResponse: () => ({ ok: true as const }),
@@ -80,7 +91,7 @@ export const authPublicApi = baseApi.injectEndpoints({
 export const {
   useAuthRegisterMutation,
   useAuthLoginMutation,
-  useAuthRefreshMutation,
+  useAuthTokenRefreshMutation,
   useAuthMeQuery,
   useAuthStatusQuery,
   useAuthUpdateMutation,

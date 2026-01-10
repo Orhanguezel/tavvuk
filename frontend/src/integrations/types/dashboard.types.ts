@@ -1,23 +1,60 @@
 // =============================================================
 // FILE: src/integrations/types/dashboard.types.ts
-// Ensotek – Admin Dashboard Types
+// FINAL — Dashboard Analytics Types (admin)
 // =============================================================
 
-/**
- * Backend'den dönen basit sayım verisi.
- * key: "products", "categories", "services" vs. (sidebar tab id'leri ile uyumlu olursa süper)
-//  label: kart üzerinde görünen isim
- */
-export interface DashboardCountItemDto {
-  key: string;
-  label: string;
-  count: number;
-}
+export type DashboardRangeKey = '7d' | '30d' | '90d';
+export type DashboardTrendBucket = 'day' | 'week';
 
-/**
- * Dashboard özet DTO
- * İstersen ileride buraya ekstra alanlar (son 7 gün, sistem statüleri vs.) ekleyebiliriz.
- */
-export interface DashboardSummaryDto {
-  items: DashboardCountItemDto[];
+export type AdminDashboardAnalyticsQuery = {
+  range?: DashboardRangeKey;
+};
+
+export interface DashboardAnalyticsDto {
+  range: DashboardRangeKey;
+  from: string; // ISO
+  to: string; // ISO
+  meta: {
+    bucket: DashboardTrendBucket;
+  };
+
+  totals: {
+    delivered_orders: number;
+    total_units_delivered: number;
+    total_incentives: number;
+  };
+
+  drivers: Array<{
+    driver_id: string;
+    driver_name: string;
+    delivered_orders: number;
+    units_delivered: number;
+    incentives: number;
+  }>;
+
+  sellers: Array<{
+    seller_id: string;
+    seller_name: string;
+    delivered_orders: number;
+    units_delivered: number;
+    incentives: number;
+  }>;
+
+  product_mix: Array<{
+    product_id: string;
+    product_title: string;
+    units_delivered: number;
+  }>;
+
+  species_mix: Array<{
+    species: string;
+    units_delivered: number;
+  }>;
+
+  trend: Array<{
+    bucket: string; // YYYY-MM-DD | YYYY-Wxx
+    delivered_orders: number;
+    units_delivered: number;
+    incentives: number;
+  }>;
 }

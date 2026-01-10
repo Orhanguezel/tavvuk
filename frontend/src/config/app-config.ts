@@ -1,14 +1,19 @@
+// =============================================================
+// FILE: src/config/app-config.ts
+// FINAL — Tavvuk Panel Config (TR)
+// =============================================================
+
 import packageJson from '../../package.json';
 
 const currentYear = new Date().getFullYear();
 
 export const APP_CONFIG = {
-  name: 'Studio Admin',
+  name: 'Tavvuk Panel',
   version: packageJson.version,
-  copyright: `© ${currentYear}, Studio Admin.`,
+  copyright: `© ${currentYear}, Tavvuk.`,
   meta: {
-    title: 'Studio Admin - Modern Next.js Dashboard Starter Template',
+    title: 'Tavvuk Panel - Yönetim Paneli',
     description:
-      'Studio Admin is a modern, open-source dashboard starter template built with Next.js 16, Tailwind CSS v4, and shadcn/ui. Perfect for SaaS apps, admin tavvuks, and internal tools—fully customizable and production-ready.',
+      'Tavvuk yönetim paneli; sipariş, ürün, lokasyon, prim, bildirim ve rapor süreçlerini tek noktadan yönetmeniz için tasarlanmıştır.',
   },
-};
+} as const;

@@ -115,6 +115,15 @@ curl -I http://127.0.0.1:3019 | head
 curl -I http://127.0.0.1:8045 | head
 
 
+cd /var/www/tavvuk/frontend
+bun run build
+pm2 restart tavvuk-frontend
+
+pm2 save
+pm2 startup
+
+
+
 
 
 

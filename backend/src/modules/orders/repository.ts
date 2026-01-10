@@ -1,22 +1,23 @@
 // =============================================================
 // FILE: src/modules/orders/repository.ts
 // FINAL — Orders repository (create/list/detail + workflow helpers + ledger)
+// - getOrderItems: joins products for UI-friendly item rows
+// - adminListOrders: joins assigned driver user for UI (name/phone)
 // =============================================================
-import { randomUUID } from 'crypto';
-import { db } from '@/db/client';
-import {
-  orders,
-  orderItems,
-} from './schema';
-import {
-  incentivePlans,
-  incentiveRules,
-  incentiveLedger,
-} from '@/modules/incentives/schema';
-import { and, asc, desc, eq, gte, lte, like, sql, inArray } from 'drizzle-orm';
-import { generateLedgerForOrderTx } from '@/modules/incentives/service';
-import type { IncentiveRoleContext } from '@/modules/incentives/types';
 
+import { randomUUID } from 'crypto';
+
+import { orders, orderItems } from './schema';
+
+// ✅ joins
+import { products } from '@/modules/products/schema';
+import { users } from '@/modules/auth/schema'; 
+
+import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+
+import { generateLedgerForOrderTx } from '@/modules/incentives/service';
+import { incentivePlans, incentiveRules, incentiveLedger } from '@/modules/incentives/schema';
+import type { IncentiveRoleContext } from '@/modules/incentives/types';
 
 type Executor = any; // db or tx
 
@@ -26,13 +27,46 @@ function parseDate(v?: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/* ----------------------------- core reads ----------------------------- */
+
 export async function getOrderById(ex: Executor, id: string) {
   return (await ex.select().from(orders).where(eq(orders.id, id)).limit(1))[0] ?? null;
 }
 
+/**
+ * ✅ Items with product info (UI-friendly)
+ * Returns:
+ * - orderItems fields
+ * - product_* fields (title/slug/price/tags/stock/is_active)
+ */
 export async function getOrderItems(ex: Executor, orderId: string) {
-  return await ex.select().from(orderItems).where(eq(orderItems.order_id, orderId));
+  const rows = await ex
+    .select({
+      // order_items
+      id: orderItems.id,
+      order_id: orderItems.order_id,
+      product_id: orderItems.product_id,
+      qty_ordered: orderItems.qty_ordered,
+      qty_delivered: orderItems.qty_delivered,
+      created_at: (orderItems as any).created_at,
+      updated_at: (orderItems as any).updated_at,
+
+      // products (aliased)
+      product_title: (products as any).title,
+      product_slug: (products as any).slug,
+      product_price: (products as any).price,
+      product_tags: (products as any).tags,
+      product_stock_quantity: (products as any).stock_quantity,
+      product_is_active: (products as any).is_active,
+    })
+    .from(orderItems)
+    .leftJoin(products as any, eq((products as any).id, orderItems.product_id))
+    .where(eq(orderItems.order_id, orderId));
+
+  return rows;
 }
+
+/* ----------------------------- create / patch ----------------------------- */
 
 export async function createOrderTx(
   ex: Executor,
@@ -113,12 +147,15 @@ export async function patchOrderSubmittedTx(
   }
 }
 
+/* ----------------------------- lists ----------------------------- */
+
 export async function listOrdersForUser(ex: Executor, userId: string, q: any) {
   const conds: any[] = [];
   // seller/driver: own OR assigned
   conds.push(sql`(${orders.created_by} = ${userId} OR ${orders.assigned_driver_id} = ${userId})`);
 
   if (q.status) conds.push(eq(orders.status, q.status));
+
   const df = parseDate(q.date_from);
   const dt = parseDate(q.date_to);
   if (df) conds.push(gte(orders.created_at, df));
@@ -136,6 +173,13 @@ export async function listOrdersForUser(ex: Executor, userId: string, q: any) {
     .offset(q.offset);
 }
 
+/**
+ * ✅ Admin list with driver info for UI table:
+ * - assigned_driver_full_name
+ * - assigned_driver_phone
+ *
+ * NOTE: orders.* fields are preserved
+ */
 export async function adminListOrders(ex: Executor, q: any) {
   const conds: any[] = [];
 
@@ -159,13 +203,94 @@ export async function adminListOrders(ex: Executor, q: any) {
   const dir = q.order === 'asc' ? asc : desc;
   const sortCol = q.sort === 'status' ? orders.status : orders.created_at;
 
-  return await ex
-    .select()
+  // 🔥 join users for driver columns
+  const rows = await ex
+    .select({
+      // keep order fields (explicit to avoid collisions + allow driver cols)
+      id: orders.id,
+      created_by: orders.created_by,
+      assigned_driver_id: orders.assigned_driver_id,
+      status: orders.status,
+      city_id: orders.city_id,
+      district_id: orders.district_id,
+      customer_name: orders.customer_name,
+      customer_phone: orders.customer_phone,
+      address_text: orders.address_text,
+      approved_by: (orders as any).approved_by,
+      approved_at: (orders as any).approved_at,
+      cancel_reason: (orders as any).cancel_reason,
+      delivered_at: (orders as any).delivered_at,
+      delivery_note: (orders as any).delivery_note,
+      delivered_qty_total: (orders as any).delivered_qty_total,
+      is_delivery_counted: (orders as any).is_delivery_counted,
+      created_at: (orders as any).created_at,
+      updated_at: (orders as any).updated_at,
+
+      // driver info (aliased)
+      assigned_driver_full_name: (users as any).full_name,
+      assigned_driver_phone: (users as any).phone,
+    })
     .from(orders)
+    .leftJoin(users as any, eq((users as any).id, orders.assigned_driver_id))
     .where(where)
     .orderBy(dir(sortCol))
     .limit(q.limit)
     .offset(q.offset);
+
+  return rows;
+}
+
+export async function listOrdersForDriver(ex: Executor, driverId: string, q: any) {
+  const conds: any[] = [];
+  // Driver için: sadece assigned olanlar
+  conds.push(eq(orders.assigned_driver_id, driverId));
+
+  if (q.status) conds.push(eq(orders.status, q.status));
+
+  const df = parseDate(q.date_from);
+  const dt = parseDate(q.date_to);
+  if (df) conds.push(gte(orders.created_at, df));
+  if (dt) conds.push(lte(orders.created_at, dt));
+
+  const where = conds.length === 1 ? conds[0] : and(...conds);
+  const dir = q.direction === 'asc' ? asc : desc;
+
+  return await ex
+    .select()
+    .from(orders)
+    .where(where)
+    .orderBy(dir(orders.created_at))
+    .limit(q.limit)
+    .offset(q.offset);
+}
+
+export async function adminCountOrders(ex: Executor, q: any) {
+  const conds: any[] = [];
+
+  if (q.status) conds.push(eq(orders.status, q.status));
+  if (q.city_id) conds.push(eq(orders.city_id, q.city_id));
+  if (q.district_id) conds.push(eq(orders.district_id, q.district_id));
+
+  if (q.q) {
+    const term = `%${String(q.q).trim()}%`;
+    conds.push(
+      sql`(${orders.customer_name} LIKE ${term} OR ${orders.customer_phone} LIKE ${term})`,
+    );
+  }
+
+  const df = parseDate(q.date_from);
+  const dt = parseDate(q.date_to);
+  if (df) conds.push(gte(orders.created_at, df));
+  if (dt) conds.push(lte(orders.created_at, dt));
+
+  const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
+
+  const row = await ex
+    .select({ c: sql<number>`COUNT(*)`.as('c') })
+    .from(orders)
+    .where(where);
+
+  return Number(row?.[0]?.c ?? 0);
 }
 
 /* ----------------------------- workflow helpers ----------------------------- */
@@ -182,8 +307,6 @@ export async function approveOrderTx(ex: Executor, orderId: string, adminId: str
     .where(eq(orders.id, orderId));
 }
 
-
-
 export async function cancelOrderTx(
   ex: Executor,
   orderId: string,
@@ -198,9 +321,6 @@ export async function cancelOrderTx(
       updated_at: new Date(),
     })
     .where(eq(orders.id, orderId));
-
-  // ledger varsa iptal senaryosu MVP’de “yazma” üzerinden gittiği için burada silmek opsiyonel:
-  // await ex.delete(incentiveLedger).where(eq(incentiveLedger.order_id, orderId));
 }
 
 export async function deliverOrderTx(
@@ -310,7 +430,7 @@ export async function generateLedgerTx(ex: Executor, orderId: string) {
   const plan = await pickActivePlanTx(ex, new Date(o.delivered_at as any));
   if (!plan) return;
 
-  const deliveredQtyTotal = Number(o.delivered_qty_total ?? 0);
+  const deliveredQtyTotal = Number((o as any).delivered_qty_total ?? 0);
   const calculatedAt = new Date();
 
   // Creator row
@@ -328,7 +448,6 @@ export async function generateLedgerTx(ex: Executor, orderId: string) {
       calculated_at: calculatedAt,
     });
   } catch (err: any) {
-    // idempotent: unique(order_id,user_id,role_context)
     if (err?.code !== 'ER_DUP_ENTRY') throw err;
   }
 
@@ -352,63 +471,3 @@ export async function generateLedgerTx(ex: Executor, orderId: string) {
     }
   }
 }
-
-// repository.ts içine ekle
-
-export async function listOrdersForDriver(ex: Executor, driverId: string, q: any) {
-  const conds: any[] = [];
-  // Driver için: sadece assigned olanlar
-  conds.push(eq(orders.assigned_driver_id, driverId));
-
-  if (q.status) conds.push(eq(orders.status, q.status));
-
-  const df = parseDate(q.date_from);
-  const dt = parseDate(q.date_to);
-  if (df) conds.push(gte(orders.created_at, df));
-  if (dt) conds.push(lte(orders.created_at, dt));
-
-  const where = conds.length === 1 ? conds[0] : and(...conds);
-  const dir = q.direction === 'asc' ? asc : desc;
-
-  return await ex
-    .select()
-    .from(orders)
-    .where(where)
-    .orderBy(dir(orders.created_at))
-    .limit(q.limit)
-    .offset(q.offset);
-}
-
-
-
-export async function adminCountOrders(ex: Executor, q: any) {
-  const conds: any[] = [];
-
-  if (q.status) conds.push(eq(orders.status, q.status));
-  if (q.city_id) conds.push(eq(orders.city_id, q.city_id));
-  if (q.district_id) conds.push(eq(orders.district_id, q.district_id));
-
-  if (q.q) {
-    const term = `%${String(q.q).trim()}%`;
-    conds.push(
-      sql`(${orders.customer_name} LIKE ${term} OR ${orders.customer_phone} LIKE ${term})`,
-    );
-  }
-
-  const df = parseDate(q.date_from);
-  const dt = parseDate(q.date_to);
-  if (df) conds.push(gte(orders.created_at, df));
-  if (dt) conds.push(lte(orders.created_at, dt));
-
-  const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
-
-  const row = await ex
-    .select({ c: sql<number>`COUNT(*)`.as('c') })
-    .from(orders)
-    .where(where);
-
-  return Number(row?.[0]?.c ?? 0);
-}
-
-
-

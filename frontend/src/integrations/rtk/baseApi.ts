@@ -1,13 +1,6 @@
 // =============================================================
 // FILE: src/integrations/rtk/baseApi.ts
-// Panel Next.js + Fastify backend için RTK base
-// FINAL (HARDENED):
-//  - Cookie auth: credentials: 'include' (kritik)
-//  - Authorization header cookie auth'u bozmasın diye /auth/* için kesin bypass
-//  - 401 -> refresh (tek refresh in-flight) -> retry (sonsuz loop engelli)
-//  - FormData body varsa Content-Type ASLA set edilmez (boundary bozulmasın)
-//  - JSON-like body varsa Content-Type set edilir
-//  - Headers: object | Headers iki türü de güvenli yönetilir
+// FINAL — RTK base (cookie-auth safe, same-origin friendly + optional bearer)
 // =============================================================
 
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
@@ -20,37 +13,14 @@ import type {
 
 import { tags } from './tags';
 import { BASE_URL as CONFIG_BASE_URL } from '@/integrations/rtk/constants';
-
-/* ---------------------------------- baseUrl ---------------------------------- */
+import { tokenStore } from '@/integrations/core/token';
 
 function trimSlash(x: string) {
   return String(x || '').replace(/\/+$/, '');
 }
 
-/**
- * Panel için dev tahmini:
- * - UI:      http://localhost:3000
- * - Backend: http://localhost:8045/api
- */
-function guessDevBackend(): string {
-  try {
-    if (typeof window !== 'undefined') {
-      const { protocol, hostname } = window.location;
-      const host = hostname || 'localhost';
-      return `${protocol}//${host}:8045/api`;
-    }
-  } catch {
-    // noop
-  }
-  return 'http://localhost:8045/api';
-}
-
-// Öncelik: constants.ts -> env -> dev guess
-const BASE_URL = trimSlash(
-  CONFIG_BASE_URL ||
-    process.env.NEXT_PUBLIC_PANEL_API_BASE ||
-    (process.env.NODE_ENV !== 'production' ? guessDevBackend() : '/api'),
-);
+// ✅ Default: same-origin
+const BASE_URL = trimSlash(CONFIG_BASE_URL || '/api');
 
 /* ---------------------------------- helpers ---------------------------------- */
 
@@ -74,7 +44,6 @@ function toPath(u: string): string {
   const s = String(u || '');
   if (!s) return '/';
 
-  // absolute url -> pathname
   if (/^https?:\/\//i.test(s)) {
     try {
       return new URL(s).pathname || '/';
@@ -99,8 +68,8 @@ function isHeaders(h: any): h is Headers {
 
 function headerHas(h: any, key: string): boolean {
   if (!h) return false;
-  if (isHeaders(h)) return h.has(key);
   const k = key.toLowerCase();
+  if (isHeaders(h)) return h.has(key) || h.has(k);
   return Object.keys(h).some((x) => x.toLowerCase() === k);
 }
 
@@ -129,9 +98,8 @@ function headerDel(h: any, key: string): any {
 /* ------------------------------- auth behavior ------------------------------ */
 
 /**
- * Cookie-auth ortamında Authorization header çoğu zaman sıkıntı çıkarır:
- * - Backend, Authorization gördüğünde cookie'yi ignore edebilir.
- * Bu yüzden /auth/* altında Authorization kesinlikle EKLENMEZ / VARSA SİLİNİR.
+ * Cookie-auth ortamında Authorization header bazı backendlerde cookie'yi gölgeler.
+ * Bu yüzden /auth/* altında Authorization kesinlikle eklenmez; varsa silinir.
  */
 const AUTH_HEADER_BYPASS_PREFIXES = ['/auth/'] as const;
 
@@ -140,21 +108,14 @@ function shouldBypassAuthHeader(path: string): boolean {
   return AUTH_HEADER_BYPASS_PREFIXES.some((pref) => p === pref || p.startsWith(pref));
 }
 
-/**
- * Refresh denemesi YAPMAYACAĞIMIZ path'ler (sonsuz loop önler).
- */
 const AUTH_SKIP_REAUTH = new Set<string>([
   '/auth/login',
   '/auth/logout',
-  '/auth/token/refresh',
+  '/auth/refresh', // ✅ backend ile uyumlu
   '/auth/me',
   '/auth/status',
 ]);
 
-/**
- * ✅ JSON body: Content-Type application/json set edilir
- * ✅ FormData body: Content-Type ASLA set edilmez; varsa kaldırılır
- */
 function ensureContentType(a: FetchArgs): FetchArgs {
   const next: FetchArgs = { ...a };
 
@@ -164,9 +125,8 @@ function ensureContentType(a: FetchArgs): FetchArgs {
     return next;
   }
 
-  // JSON-like body => Content-Type set
+  // JSON-like body => content-type set
   if (typeof next.body !== 'undefined' && isJsonLikeBody(next.body)) {
-    // tek casing ile set etmek yeterli (Headers case-insensitive)
     next.headers = headerSet(next.headers, 'content-type', 'application/json');
   }
 
@@ -175,9 +135,23 @@ function ensureContentType(a: FetchArgs): FetchArgs {
 
 function stripAuthorizationIfNeeded(a: FetchArgs, cleanPath: string): FetchArgs {
   if (!shouldBypassAuthHeader(cleanPath)) return a;
-
   const next: FetchArgs = { ...a };
   next.headers = headerDel(headerDel(next.headers, 'authorization'), 'Authorization');
+  return next;
+}
+
+function attachBearerIfPresent(a: FetchArgs, cleanPath: string): FetchArgs {
+  // /auth/* için asla ekleme
+  if (shouldBypassAuthHeader(cleanPath)) return a;
+
+  const token = tokenStore.get();
+  if (!token) return a;
+
+  // Header zaten varsa override etmeyelim
+  if (headerHas(a.headers, 'authorization') || headerHas(a.headers, 'Authorization')) return a;
+
+  const next: FetchArgs = { ...a };
+  next.headers = headerSet(next.headers, 'authorization', `Bearer ${token}`);
   return next;
 }
 
@@ -191,16 +165,15 @@ type RBQ = BaseQueryFn<
   FetchBaseQueryMeta
 >;
 
-const DEFAULT_LOCALE = (process.env.NEXT_PUBLIC_DEFAULT_LOCALE as string | undefined) || 'de';
+const DEFAULT_LOCALE = (process.env.NEXT_PUBLIC_DEFAULT_LOCALE as string | undefined) || 'tr';
 
 const rawBaseQuery: RBQ = fetchBaseQuery({
-  baseUrl: BASE_URL,
-  credentials: 'include', // ✅ Cookie set/forward için KRİTİK
+  baseUrl: BASE_URL, // ✅ "/api"
+  credentials: 'include', // ✅ cookie auth için kritik
   prepareHeaders: (headers) => {
     if (!headers.has('accept')) headers.set('accept', 'application/json');
     if (!headers.has('accept-language')) headers.set('accept-language', DEFAULT_LOCALE);
-
-    // Cookie-auth esas: Authorization'ı burada default eklemiyoruz.
+    // Authorization burada set etmiyoruz (request bazında ekliyoruz)
     return headers;
   },
   responseHandler: async (response) => {
@@ -220,26 +193,18 @@ const rawBaseQuery: RBQ = fetchBaseQuery({
 /* -------------------------- 401 -> refresh -> retry -------------------------- */
 
 type RawResult = Awaited<ReturnType<typeof rawBaseQuery>>;
-
-// ✅ refresh concurrency
 let refreshInFlight: Promise<RawResult> | null = null;
 
 async function runRefresh(api: any, extra: any): Promise<RawResult> {
-  // refresh endpoint cookie ile çalışacak; Authorization istemiyoruz
-  const r = await rawBaseQuery(
+  return (await rawBaseQuery(
     {
-      url: '/auth/token/refresh',
+      url: '/auth/refresh', // ✅ backend router ile uyumlu
       method: 'POST',
-      // JSON body yoksa content-type set etmiyoruz (backend body bekliyorsa ekleyebilirsin)
-      headers: {
-        accept: 'application/json',
-      } as any,
+      headers: { accept: 'application/json' } as any,
     },
     api,
     extra,
-  );
-
-  return r as RawResult;
+  )) as RawResult;
 }
 
 const baseQueryWithReauth: RBQ = async (args, api, extra) => {
@@ -249,8 +214,9 @@ const baseQueryWithReauth: RBQ = async (args, api, extra) => {
   const cleanPath = normalizeCleanPath(urlPath);
 
   if (typeof req !== 'string') {
-    req = stripAuthorizationIfNeeded(req, cleanPath);
     req = ensureContentType(req);
+    req = attachBearerIfPresent(req, cleanPath);
+    req = stripAuthorizationIfNeeded(req, cleanPath);
   }
 
   // ---- first attempt
@@ -277,8 +243,9 @@ const baseQueryWithReauth: RBQ = async (args, api, extra) => {
       const retryCleanPath = normalizeCleanPath(retryPath);
 
       if (typeof retry !== 'string') {
-        retry = stripAuthorizationIfNeeded(retry, retryCleanPath);
         retry = ensureContentType(retry);
+        retry = attachBearerIfPresent(retry, retryCleanPath);
+        retry = stripAuthorizationIfNeeded(retry, retryCleanPath);
       }
 
       result = (await rawBaseQuery(retry, api, extra)) as RawResult;

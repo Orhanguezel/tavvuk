@@ -9,6 +9,7 @@ import type {
   AdminListOrdersQuery,
   OrderView,
   OrderDetailResponse,
+  CreateOrderBody,
   AdminAssignDriverBody,
   AdminAssignDriverResponse,
   AdminCancelBody,
@@ -100,6 +101,23 @@ export const ordersAdminApi = baseApi.injectEndpoints({
       ],
     }),
 
+    /** POST /admin/orders -> { order, items } */
+    adminCreateOrder: b.mutation<OrderDetailResponse, CreateOrderBody>({
+      query: (body) => ({
+        url: `${ADMIN_ORDERS_BASE}`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (res: any): OrderDetailResponse => ({
+        order: (res?.order ?? res?.data?.order ?? null) as any,
+        items: Array.isArray(res?.items) ? res.items : [],
+      }),
+      invalidatesTags: () => [
+        { type: 'AdminOrders' as const, id: 'LIST' },
+        { type: 'Orders' as const, id: 'MY_LIST' },
+      ],
+    }),
+
     /** POST /admin/orders/:id/cancel -> { ok: true } */
     adminCancelOrder: b.mutation<OkResponse, { id: string; body: AdminCancelBody }>({
       query: ({ id, body }) => ({
@@ -124,6 +142,7 @@ export const {
   useAdminListOrdersQuery,
   useAdminGetOrderQuery,
   useAdminApproveOrderMutation,
+  useAdminCreateOrderMutation,
   useAdminAssignDriverMutation,
   useAdminCancelOrderMutation,
 } = ordersAdminApi;

@@ -1,30 +1,24 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactCompiler: true,
-  compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
-  },
+  compiler: { removeConsole: process.env.NODE_ENV === 'production' },
 
+  // ✅ kaldırıyoruz: /admin/dashboard -> /admin/dashboard/default
   async redirects() {
     return [
-      {
-        source: '/dashboard',
-        destination: '/dashboard/default',
-        permanent: false,
-      },
+      // İstersen eski linkleri yakalamak için tersine redirect bırakabilirsin:
+      // { source: '/admin/dashboard/default', destination: '/admin/dashboard', permanent: false },
     ];
   },
 
   async rewrites() {
-    // Backend origin: env > fallback
-    const backend =
+    const origin =
       process.env.PANEL_API_URL || process.env.NEXT_PUBLIC_PANEL_API_URL || 'http://localhost:8045';
 
-    const base = String(backend).replace(/\/+$/, '');
+    const base = String(origin).replace(/\/+$/, '');
 
     return [
       {
-        // ✅ Same-origin /api proxy → backend /api
         source: '/api/:path*',
         destination: `${base}/api/:path*`,
       },
