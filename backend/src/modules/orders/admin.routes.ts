@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   adminList,
   adminGet,
+  adminCreate, // ✅ add
   adminApprove,
   adminAssignDriver,
   adminCancel,
@@ -16,7 +17,6 @@ import { requireAdmin } from '@/common/middleware/roles';
 
 export async function registerAdminOrders(app: FastifyInstance) {
   const BASE = '/orders';
-
   const guard = { preHandler: [requireAuth as any, requireAdmin as any] };
 
   app.get(
@@ -29,6 +29,13 @@ export async function registerAdminOrders(app: FastifyInstance) {
     `${BASE}/:id`,
     { ...guard, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
     adminGet,
+  );
+
+  // ✅ Admin manual create
+  app.post(
+    `${BASE}`,
+    { ...guard, config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    adminCreate,
   );
 
   app.post(

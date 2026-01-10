@@ -40,6 +40,8 @@ import { registerDriverOrders } from '@/modules/orders/driver.routes';
 import { registerAssignmentsAdmin } from '@/modules/assignments/admin.routes';
 import { registerIncentivesAdmin } from '@/modules/incentives/admin.routes';
 import { registerReportsAdmin } from '@/modules/reports/admin.routes';
+import { registerDashboardAdmin } from '@/modules/dashboard/admin.routes';
+
 
 
 
@@ -187,7 +189,7 @@ export async function createApp() {
     await api.register(registerAssignmentsAdmin, { prefix: '/admin' });
     await api.register(registerIncentivesAdmin, { prefix: '/admin' });
     await api.register(registerReportsAdmin, { prefix: '/admin' });
-    
+    await api.register(registerDashboardAdmin, { prefix: '/admin' });
 
     // --- Public modüller → /api/...
     await registerAuth(api);
@@ -200,8 +202,6 @@ export async function createApp() {
     await registerAssignments(api);
     await registerIncentives(api);
     await registerNotifications(api);
-
-    
   }, { prefix: "/api" });
 
   registerErrorHandlers(app);

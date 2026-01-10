@@ -78,7 +78,7 @@ export function LoginForm() {
 
       toast.success('Logged in successfully.');
 
-      const next = safeNext(sp?.get('next'), '/dashboard');
+      const next = safeNext(sp?.get('next'), '/admin/dashboard');
       router.replace(next);
       router.refresh();
     } catch (err) {
